@@ -699,15 +699,15 @@
             $base = 0;
             while (($data = fgetcsv($sf,300,','," ")) !== FALSE)
             {
-                // if (!is_numeric($data[$data_column]))
-				// {
-				// 	$day_before = $data[$data_column];
-				// 	continue;
-				// }
+                if ($y < 2)
+				{
+					$y+=$day_cnt;
+					$day_before = $data[$data_column];
+					continue;
+				}
                 $date_1 = $day_before;
                 $seq[] = [ ($y), $date_1, $day_before, $data[$date_column] ];
-				$day_before = $data[$data_column];
-                
+                $day_before = $data[$data_column];
                 $y+=$day_cnt;
             }
             fclose($sf);
@@ -722,6 +722,7 @@
             $inc_real = 0;
             $inc_imaginary = 0;
 			$s = 0;
+			$count = 0;
             foreach($seq as $key) {
                 $vals = $key;
                 array_pop($vals);
@@ -739,30 +740,29 @@
                 $string .= "<tr><td>".$key[3]." </td><td> ".$vals[3]." </td><td> $c  </td><td>". $this->derive($vals) . " </td><td> ".$this->integral($key)."</td>$real";
                 $lo = $this->derive($vals) / $vals[3] / $c;
                 $lo *= $this->derive($vals);
-                // while ($lo <= 0.0999)
-                //     $lo *= 10;
+                while ($lo <= 0.0999)
+                    $lo *= 10;
                 $short_low = abs(($lo));
-                $short_low = (($lo * $vals[2] / 125) - $vals[3] );
+                $short_low = (($lo * $vals[2] / 135) - $vals[3] );
                 $short_low = ($base + round($short_low / $out,2) - (1 * $exp));
                 if ($short_low > pow(10, $exp) && $exp < 3) {
                     $out = pow(10, $exp++);
                 }
                 $bool2 = true;
                 $same = "";
-                if ($short_low > $inc_imaginary)
+                if ($short_low - 1 > $inc_imaginary)
                 {
                     $string .= "<td>+$short_low</td>";
                     $bool2 = false;
                 }
-                else if ($short_low < $inc_imaginary)
+                else 
                     $string .= "<td>-$short_low</td>";
-                else if ($short_low == $inc_imaginary)
-                {
-                    $string .= "<td>=$short_low</td>";
-                }
-                
+
                 if ($bool2 == $bool1)
+				{
                     $string .= "<td style='color:blue;background-color:blue'>&&&&&&&&</td></tr>";
+					$correct++;
+				}
                 else
                     $string .= "<td style='color:red;background-color:red'>&&&&&&&&</td></tr>";
                 $same = "";
@@ -774,35 +774,31 @@
             $str = "";
             $vals[0] = $z = $x;
             $key = $vals;
-            for ($x = 0 ; $x < 100 ; $x++)
+			$string .= "<tr><td colspan='8'>".($correct/sizeof($seq)) . "</td></tr>";
+            for ($x = 0 ; $x < 50 ; $x++)
             {
                 $vals = $key;
                 $vals[3] = $this->integrand($key);
                 $c = $this->differential($key);
                 $str .= "<tr><td> $z </td><td> ".$vals[3]." </td><td> $c </td><td>". $this->derive($vals) . " </td><td> ".$this->integral($key)."</td><td>".$key[1]."</td>";
-                $lo = $this->derive($vals) / $vals[3] / $c * $this->derive($vals);
-                while ($lo <= 0.999)
+                $lo = $this->derive($vals) / $vals[3] / $c;
+                $lo *= $this->derive($vals);
+                while ($lo <= 0.0999)
                     $lo *= 10;
-                $short_low = ($lo * $vals[2]);
-                $short_low_pos = ($base + round($short_low / $out,2));
-				$short_low_neg = ($base - round($short_low / $out,2));
-                $short_low = abs($short_low);
+                $short_low = abs(($lo));
+                $short_low = (($lo * $vals[2] / 135) - $vals[3] );
+                $short_low = ($base + round($short_low / $out,2) - (1 * $exp));
                 if ($short_low > pow(10, $exp) && $exp < 3) {
                     $out = pow(10, $exp++);
                 }
-                if ($short_low > $inc_imaginary)
+				$bool2 = true;
+                if ($short_low - 1 >= $inc_imaginary)
                 {
                     $str .= "<td>+$short_low</td>";
-                    $bool2 = true;
+                    $bool2 = false;
                 }
-                else if ($short_low < $inc_imaginary)
+                else// if ($short_low + 1 <= $inc_imaginary)
                     $str .= "<td>-$short_low</td>";
-                else if ($short_low == $inc_imaginary)
-                {
-                    $str .= "<td>=$short_low</td>";
-                    $bool2 = !$bool1;
-                    $same = "now";
-                }
                 
                 if ($bool2 == $bool1)
                     $str .= "<td style='color:blue;background-color:blue'>&&&&&&&&</td></tr>";
@@ -823,3 +819,4 @@
     }
     $next = new CNGN(5);
     $next->bitcoin("BTC-USD.csv", 25);
+?>
