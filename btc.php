@@ -692,19 +692,20 @@
             $seq = [];
             $data = [];
             fgets($sf);
-            fgets($sf);
+//            fgets($sf);
             $day_before = 0;
             $date_1 = 0;
             $y = 1;
             $base = 0;
             while (($data = fgetcsv($sf,300,','," ")) !== FALSE)
             {
+
                 if ($y < 2)
-				{
-					$y+=$day_cnt;
-					$day_before = $data[$data_column];
-					continue;
-				}
+                {
+                        $y+=$day_cnt;
+                        $day_before = $data[$data_column];
+                        continue;
+                }
                 $date_1 = $day_before;
                 $seq[] = [ ($y), $date_1, $day_before, $data[$date_column] ];
                 $day_before = $data[$data_column];
@@ -712,148 +713,163 @@
             }
             fclose($sf);
 
-            $string = "<table valign='top' style='position:width:100%relative;top-margin:0px'>";
-            $string .= "<tr><td>Long Form Date </td><td> Integrand </td><td> Differential </td><td> Differential </td><td> Integral </td><td> Price</td><td>Low</td><td>RB</td></tr>";
+//            $string = "<table valign='top' style='background-color:white;z-index:1;position:absolute;width:100%;top-margin:0px;'>";
+            $string = "<tr><td style='width:150;margin-top:5px;'>Long Form Date </td><td> Differential </td><td>Integrand</td><td> Integral </td><td>Low</td><td>RB</td></tr>";
             $y = 1;
             $vals = [];
-            $x = 1;
+            $x = 0;
             $exp = 1;
             $out = 1;
             $inc_real = 0;
-             $inc_imaginary = 0;
-			$s = 0;
-			$count = 0;
+            $inc_imaginary = 0;
+            $s = 0;
+            $count = 0;
             $inc_last = 0;
+            $saved = 0;
             $correct = 0;
-            foreach($seq as $key) {
+            $key = [];
+            for ($i = count($seq) - 1; $i >= 0 ; $i--) {
+               $key = $seq[$i];
                 $vals = $key;
                 $inc_real = $vals[1];
                 array_pop($vals);
                 $vals[] = $this->integrand($key);
                 $c = $this->differential($key);
                 $real = "";
-                $bool1 = true;
-                if ($inc_last < $inc_real)
+                $bool1 = "-";
+                if ($i == count($seq)-1)
+                {
+//                      $real = "<td></td>";
+                }
+                if (($inc_real) > $inc_last)
                 {
                     $real = "<td>+".$key[1]."</td>";
-                    $bool1 = false;
+                    $bool1 = "+";
                 }
                 else
                     $real = "<td>-".$key[1]."</td>";
-                $string .= "<tr><td colspan='2'>".$key[3]." </td>" . /*<td> ".$vals[3]. " </td> */"<td> $c  </td><td>". $this->derive($vals) . " </td><td> ".$this->integral($key)."</td>$real";
+                $string .= "<tr><td style='width:150;'>".$key[3]." </td>" . /*<td> ".$vals[3]. " </td> */"<td> $c  </td><td>". $this->derive($vals) . " </td><td> ".$this->integral($key)."</td>$real";
+                $lo = $this->derive($vals) / $vals[3] / $c;
+                $lo *= $this->derive($vals);
+                while ($lo <= 0.0999)
+                    $lo *= 10;
+                $short_low = abs(($lo));
+                $short_low = (($lo * $vals[2] / 10) - $vals[3]);
+                $short_low = ($base + round($short_low / $out,2)*2);// - (1 * $exp));
+                $exp = 1;
+                if ($short_low > pow(10, $exp) && $exp < 3) {
+                    $out = pow(10, $exp++);
+                }
+                $bool2 = "-";
+                if (($short_low > $inc_imaginary))
+                {
+                    $bool2 = "+";
+                }
+                if ($bool2 == $bool1)
+                        $colored = "green";
+                else
+                        $colored = "red";
+                if ($bool2 == $bool1)
+                        $correct++;
+                if ($i != count($seq)-1)
+                {
+                        $string .= "<td style='color:black;background-color:".$colored."'>" . $bool2 . abs(($inc_imaginary - $short_low)/32.56) . "</td></tr>";
+                }
+                else
+                        $string .= "<td></td></tr>";
+                $inc_imaginary = $short_low;
+                $inc_last = $inc_real;
+            }
+            $string .= "<tr><td colspan='8'>" . round(($correct / count($seq)) * 100,1) . "</td></tr>";
+            $base = $short_low;
+            $str = $string;
+            // $vals[0] = $z = $x;
+            $string = "";
+            $saved = [ ($inc_imaginary - $short_low), ($inc_real) ];
+            // $key = $vals;
+                        // $string .= "<tr><td colspan='8'>".($correct/sizeof($seq)) . "</td></tr>";
+            for ($x = 0 ; $x < 150 ; $x++)// += $day_cnt)
+            {
+                if ($x == 0)
+                    $vals = $key;
+                else
+                    $key = $vals;
+                $inc_real = $vals[1];
+                array_pop($vals);
+                $vals[] = $this->integrand($key);
+                $c = 2; //$this->differential($key);
+                $vals[2] = $this->integral($seq[152-$x]);
+                $bool1 = "+";
+                $vals[3] += 8;
+                if (($inc_real/100) < $saved[1]/100)
+                {
+                    $real = "<td>-".abs($inc_last/100 - $saved[0]/100)."</td>";
+                    $bool1 = "-";
+                }
+                else
+                    $real = "<td>+".abs($inc_last/100 + $saved[0]/100)."</td>";
+                $string .= "<tr><td style='width:150;'>&nbsp; </td>" . /*<td> ".$vals[3]. " </td> */"<td> $c  </td><td>". $this->derive($key) . " </td><td> ".$this->integral($key)."</td>$real";
                 $lo = $this->derive($vals) / $vals[3] / $c;
                 $lo *= $this->derive($vals);
                 while ($lo <= 0.0999)
                     $lo *= 10;
                 // $out = ($out <= 0) ? 100 : $out;
                 $short_low = abs(($lo));
-                $short_low = (($lo * $vals[2] / 2000) - $vals[3] );
+                $short_low = (($lo * $vals[2] / 10) - $vals[3]);
                 $short_low = ($base + round($short_low / $out,2)*2);// - (1 * $exp));
                 $exp = 1;
                 if ($short_low > pow(10, $exp) && $exp < 3) {
                     $out = pow(10, $exp++);
                 }
-                // $short_low = $short_low / 10 * (abs(++$count)%7) + 1; 
+                // $short_low = $short_low / 10 * (abs(++$count)%7) + 1;
                 // $out = round(($out / 10),2);
-                $bool2 = false;
+                $bool2 = "+";
                 $same = "";
-                if ($short_low < $inc_imaginary)
+                if (($short_low < $inc_imaginary))
                 {
-                    $string .= "<td>-$short_low</td>";
-                    $bool2 = true;
+//                    $string .= "<td>+$short_low</td>";
+                    $bool2 = "-";
                 }
-                else 
-                    $string .= "<td>+$short_low</td>";
-                // $string .= (($short_low + abs($inc_real - $inc_last)) > $inc_imaginary) ? "<td>+".abs($short_low + abs($inc_real - $inc_last))."</td>" : "<td>-".($short_low + abs($inc_real - $inc_last))."</td>";
-                // $bool2 = ($short_low < $inc_imaginary) ? true : false;
                 if ($bool2 == $bool1)
-                {    
-                    $string .= "<td style='color:red;background-color:blue'>" . (($inc_last - $inc_real)) . "</td></tr>";
-                    $correct++;
-                }
+                        $colored = "green";
                 else
-                    $string .= "<td style='color:blue;background-color:red'>" . (($inc_last - $inc_real)) . "</td></tr>";
-                $same = "";
+                        $colored = "red";
+
+                $string .= "<td style='color:black;background-color:".$colored."'>" . $bool2 . abs(($inc_imaginary - $short_low)/4/100) . "</td></tr>";
+
+                $saved = [ ($inc_imaginary - $short_low), ($inc_real) ];
                 $inc_imaginary = $short_low;
-                $inc_last = $inc_real;
-                $x += $day_cnt;
-            }
-            $base = $short_low;
-            $str = "";
-            // $vals[0] = $z = $x;
-            // $key = $vals;
-			// $string .= "<tr><td colspan='8'>".($correct/sizeof($seq)) . "</td></tr>";
-            for ($x = 0 ; $x < $day_cnt*50 ; )
-            {
-                if ($x == 0)
-                    $vals = $key;
-                    
-                $inc_real = $vals[1];
-                $vals[] = $this->integrand($key);
-                $c = 2; //$this->differential($key);
-                $real = "";
-                $bool1 = true;
-                $vals[3] += 8;
-                if ($inc_last < $inc_real)
-                {
-                    $real = "<td>+".$inc_last."</td>";
-                    $bool1 = false;
-                }
-                else
-                    $real = "<td>-".$inc_last."</td>";
-                $string .= "<tr><td>".$vals[3]."</td><td> ".$vals[3]." </td><td> $c  </td><td>". ($this->derive($vals)) . " </td><td> ".$this->integral($vals)."</td>$real";
-                $lo = ($this->derive($vals)) / $vals[3] / $c;
-                $lo *= $this->derive($vals);
-                while ($lo <= 0.0999)
-                    $lo *= 10;
-                // $out = ($out <= 0) ? 100 : $out;
-                $short_low = abs(($lo));
-                $short_low = (($lo * $vals[2] / 40) - $vals[3] );
-                $short_low = ($base + round($short_low / $out,2)*2);// - (1 * $exp));
-                $exp = 1;
-                if ($short_low > pow(100, $exp) && $exp < 3) {
-                    $out = pow(100, $exp++);
-                }
-                // $short_low = $short_low / 10 * (abs(++$count)%7) + 1; 
-                // $out = round(($out / 10),2);
-                $bool2 = true;
-                $same = "";
-                if ($short_low < $inc_imaginary)
-                {
-                    $string .= "<td>+$short_low</td>";
-                    $bool2 = false;
-                }
-                else 
-                    $string .= "<td>-$short_low</td>";
-                // $string .= (($short_low + abs($inc_real - $inc_last)) > $inc_imaginary) ? "<td>+".abs($short_low + abs($inc_real - $inc_last))."</td>" : "<td>-".($short_low + abs($inc_real - $inc_last))."</td>";
-                // $bool2 = ($short_low < $inc_imaginary) ? true : false;
-                if ($bool2 == $bool1)
-                {    
-                    $string .= "<td style='color:red;background-color:blue'>" . (($inc_last - $inc_real)) . "</td></tr>";
-                    $correct++;
-                }
-                else
-                    $string .= "<td style='color:blue;background-color:red'>" . (($inc_last - $inc_real)) . "</td></tr>";
-                $same = "";
-                $inc_imaginary = $short_low;
-                $inc_last = $inc_real;
-                $x += $day_cnt;
+                $inc_last = $inc_real/1;
+                $x++;
                 $vals = [ ($x), $short_low, $vals[1], $vals[3] ];
             }
-            $string .= $str . "</table>";
-            $string .= "<br>Total Integral";
-            $string .= "<br> &nbsp; &nbsp;" . $this->find_integral($seq);
-            $string .= "<br>";
-            echo $string;
+            $string = $str . $string;
+            return [ $string, ($correct/count($seq)) ];
         }
     }
-    $next = new CNGN(5);
-    $after = new CNGN(5);
-    // 14 for Bitcoin
-    // 150 for ETH
-    // Doge
-    echo "<table style='position:relative;margin-top:0px'><tr><td style='width:50%;position:absolute;margin-top:0px'>";
-    $next->bitcoin("ETH-USD.csv", 15);
-    echo "</td><td style='width:50%;position:absolute;margin-left:800;margin-top:0px'>";
-    $after->bitcoin("eth-usdlong.csv", 15);
-    echo "</td></tr></table>";
+        $ticker = 'GOOG';
+        if(isset($_GET['symbol']))
+                $ticker = strtoupper($_GET['symbol']);
+        $next = new CNGN(5);
+
+//      touch('./tickers/'.$ticker.'.csv');
+        chown('./tickers/'.$ticker.'.csv','www-data');
+        chgrp('./tickers/'.$ticker.'.csv','www-data');
+        chmod('./tickers/'.$ticker.'.csv',777);
+        if (!file_exists('./tickers/'.$ticker.'.csv') || filemtime('./tickers/'.$ticker.'.csv') < time() - 60*60*24*5)
+        {
+                unlink('./tickers/'.$ticker.'.csv');
+                exec("php shop5kep.php -t".$ticker);
+                chown('./tickers/'.$ticker.'.csv','www-data');
+                chgrp('./tickers/'.$ticker.'.csv','www-data');
+                chmod('./tickers/'.$ticker.'.csv',777);
+        }
+        $rets = $next->bitcoin("./tickers/".$ticker.'.csv', 15);
+
+        echo "<table style='width:100%;position:fixed;float:right;z-index:2;'><tr><td style='width:60%;background-color:blue;color:white'>// ".$ticker."</td>";
+        echo "<td style='width:20%;background-color:purple;color:white'><pipe id='cntr' ajax='counter.php' style='color:white' insert='cntr'></td>";
+        echo "<td style='background-color:red;color:white'>".round($rets[1]*100,2)."% Accuracy</td></tr></table><hr>";
+        echo "<table style='width:100%;position:relative;margin-top:10px'><br><br>";
+        echo $rets[0];
+        echo "</table>";
+
