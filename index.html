@@ -1,0 +1,65 @@
+<html>
+<head>
+<title>Ivy Seed - Stock Advisor</title>
+<script src="pipes.js"></script>
+
+</head>
+<body>
+
+	<div id="header"></div>
+	<div id="stock-ticker" style="z-index:-1;width:50%;"></div>
+
+</body>
+<script>
+var mod = {
+		"tagname": "table",
+		"style":"z-index:2;position:fixed;float:top;margin:-7px;height:35px;border:0px;width:100%;background-color:black;",
+		"tn1": {
+				"tagname": "tr",
+				"style":"border:0px;background-color:black;float:left;",
+				"tn20": {
+					"tagname": "td",
+					"logo": {
+						"tagname": "span",
+						"style": "float:left;margin:0px;color:lightgray;background-color:black;",
+						"textContent":"Ivy Seed  "
+					}
+				},
+				"tn21": {
+					"tagname": "td",
+					"txt0": {
+						"tagname": "input",
+						"header":"method:GET",
+						"width":"250",
+						"height":"100%",
+						"id":"tickinput",
+						"onsubmit":"pipes(this)",
+						"form-class":"ticker",
+						"class":"ticker",
+						"name":"symbol",
+						"ajax":"./btc.php",
+						"insert":"stock-ticker",
+					},
+					"tn21": {
+						"tagname": "td",
+						"style":"float:left;",
+						"txt0": {
+							"tagname": "button",
+							"header":"method:GET",
+							"textContent":"Ticker",
+							"width":"250",
+							"height":"100%",
+							"id":"tickbutton",
+							"onclick":"pipes(this)",
+							"form-class":"ticker",
+							"class":"ticker",
+							"ajax":"./btc.php",
+							"insert":"stock-ticker"
+						}
+					}
+				}
+			}
+		};
+	modala(mod, document.getElementById("header"));
+</script>
+</html>

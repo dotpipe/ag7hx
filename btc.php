@@ -686,34 +686,34 @@
             return ($answer);
         }
         
-        function bitcoin(string $btc_csv, int $day_cnt, $data_column = 1, $date_column = 0)
+        function bitcoin(string $btc_json, int $day_cnt, $data_column = 1, $date_column = 0)
         {
-            $sf = fopen("$btc_csv","r");
+            $sf = file_get_contents("$btc_json");
+            $sf = json_decode($sf);
             $seq = [];
-            $data = [];
-            fgets($sf);
+            // fgets($sf);
 //            fgets($sf);
             $day_before = 0;
             $date_1 = 0;
             $y = 1;
             $base = 0;
-            while (($data = fgetcsv($sf,300,','," ")) !== FALSE)
+            foreach ($sf->bars as $data)
             {
-
+                $t_close = $data->close;
+                $t_day = $data->date;
                 if ($y < 2)
                 {
                         $y+=$day_cnt;
-                        $day_before = $data[$data_column];
+                        $day_before = $t_close;
                         continue;
                 }
                 $date_1 = $day_before;
-                $seq[] = [ ($y), $date_1, $day_before, $data[$date_column] ];
-                $day_before = $data[$data_column];
+                $seq[] = [ ($y), $date_1, $day_before, $t_day ];
+                $day_before = $t_close;
                 $y+=$day_cnt;
             }
-            fclose($sf);
 
-//            $string = "<table valign='top' style='background-color:white;z-index:1;position:absolute;width:100%;top-margin:0px;'>";
+            $string = "<hr><table valign='top' style='background-color:white;z-index:1;position:absolute;width:100%;top-margin:0px;'>";
             $string = "<tr><td style='width:150;margin-top:5px;'>Long Form Date </td><td> Differential </td><td>Integrand</td><td> Integral </td><td>Low</td><td>RB</td></tr>";
             $y = 1;
             $vals = [];
@@ -786,8 +786,7 @@
             // $vals[0] = $z = $x;
             $string = "";
             $saved = [ ($inc_imaginary - $short_low), ($inc_real) ];
-            // $key = $vals;
-                        // $string .= "<tr><td colspan='8'>".($correct/sizeof($seq)) . "</td></tr>";
+            $i = 1;
             for ($x = 0 ; $x < 150 ; $x++)// += $day_cnt)
             {
                 if ($x == 0)
@@ -808,7 +807,9 @@
                 }
                 else
                     $real = "<td>+".abs($inc_last/100 + $saved[0]/100)."</td>";
-                $string .= "<tr><td style='width:150;'>&nbsp; </td>" . /*<td> ".$vals[3]. " </td> */"<td> $c  </td><td>". $this->derive($key) . " </td><td> ".$this->integral($key)."</td>$real";
+                $time = gmdate("Y-m-d",time()+(3600*24*$i));
+                $i++;
+                $string .= "<tr><td style='width:150;'>$time  </td>" . /*<td> ".$vals[3]. " </td> */"<td> $c  </td><td>". $this->derive($key) . " </td><td> ".$this->integral($key)."</td>$real";
                 $lo = $this->derive($vals) / $vals[3] / $c;
                 $lo *= $this->derive($vals);
                 while ($lo <= 0.0999)
@@ -843,7 +844,7 @@
                 $x++;
                 $vals = [ ($x), $short_low, $vals[1], $vals[3] ];
             }
-            $string = $str . $string;
+            $string = round($correct/count($seq)*100,1). "% Valid" . $string . $str;
             return [ $string, ($correct/count($seq)) ];
         }
     }
@@ -852,23 +853,23 @@
                 $ticker = strtoupper($_GET['symbol']);
         $next = new CNGN(5);
 
-//      touch('./tickers/'.$ticker.'.csv');
-        chown('./tickers/'.$ticker.'.csv','www-data');
-        chgrp('./tickers/'.$ticker.'.csv','www-data');
-        chmod('./tickers/'.$ticker.'.csv',777);
-        if (!file_exists('./tickers/'.$ticker.'.csv') || filemtime('./tickers/'.$ticker.'.csv') < time() - 60*60*24*5)
-        {
-                unlink('./tickers/'.$ticker.'.csv');
-                exec("php shop5kep.php -t".$ticker);
-                chown('./tickers/'.$ticker.'.csv','www-data');
-                chgrp('./tickers/'.$ticker.'.csv','www-data');
-                chmod('./tickers/'.$ticker.'.csv',777);
+//      touch('./tickers/'.$ticker.'.json');
+        chown('./tickers/'.$ticker.'.json','www-data');
+        chgrp('./tickers/'.$ticker.'.json','www-data');
+        chmod('./tickers/'.$ticker.'.json',777);
+        if (!file_exists('./tickers/'.$ticker.'.json') || filemtime('./tickers/'.$ticker.'.json') < time() - 60*60*24*5)
+        {  
+                $time_past = time() - (60*60*24*365*2);
+                $time_past = gmdate("Y-m-d", $time_past);
+                $time_now = gmdate("Y-m-d", strtotime("now"));
+                unlink('./tickers/'.$ticker.'.json');
+                exec("curl --location --request GET 'https://api.markets.sh/api/v1/symbols/NASDAQ:$ticker/quotes?from=$time_past&to=$time_now&api_token=35985512aa777c93dc4f99d8df50d25c' -o ./tickers/$ticker.json");
+                chown('./tickers/'.$ticker.'.json','www-data');
+                chgrp('./tickers/'.$ticker.'.json','www-data');
+                chmod('./tickers/'.$ticker.'.json',777);
         }
-        $rets = $next->bitcoin("./tickers/".$ticker.'.csv', 15);
+        $rets = $next->bitcoin("./tickers/".$ticker.'.json', 15);
 
-        echo "<table style='width:100%;position:fixed;float:right;z-index:2;'><tr><td style='width:60%;background-color:blue;color:white'>// ".$ticker."</td>";
-        echo "<td style='width:20%;background-color:purple;color:white'><pipe id='cntr' ajax='counter.php' style='color:white' insert='cntr'></td>";
-        echo "<td style='background-color:red;color:white'>".round($rets[1]*100,2)."% Accuracy</td></tr></table><hr>";
         echo "<table style='width:100%;position:relative;margin-top:10px'><br><br>";
         echo $rets[0];
         echo "</table>";
