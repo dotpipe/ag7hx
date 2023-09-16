@@ -33,11 +33,14 @@
   *  callback........= calls function set as attribute value
   *  headers.........= headers in CSS markup-style-attribute (delimited by '&') <any ajax="foo.bar" headers="foobar:boo&barfoo:barfoo;q:9&" insert="someID">
   *  form-class......= class name of devoted form elements
+  *  mouse-over......= class name to work thru PipesJS' other attributes
   **** ALL HEADERS FOR AJAX are available. They will use defaults to
   **** go on if there is no input to replace them.
   */
   
-    document.addEventListener("DOMContentLoaded", function (){
+    document.addEventListener("DOMContentLoaded", function () {
+        domContentLoad();
+        return;
         doc_set = document.getElementsByTagName("pipe");
         Array.from(doc_set).forEach(function(elem) {
             setTimeout(pipes(elem),200);
@@ -55,19 +58,72 @@
             console.log(elem);
             setInterval(carousel(elem),700);
         });
-        let elementsArray_link = document.getElementsByTagName("link");
+        let elementsArray_link = document.getElementsByTagName("lnk");
         Array.from(elementsArray_link).forEach(function(elem) {
             console.log(elem);
             elem.addEventListener("click", function() {
+                console.log("C!");
+                pipes(elem);
+            });
+        });
+        let elementsArray_mouseOver = document.getElementsByClassName("mouse-over");
+        Array.from(elementsArray_mouseOver).forEach(function(elem) {
+            console.log(elem);
+            elem.addEventListener("mouseover", function() {
+                console.log("C!");
+                pipes(elem);
+            });
+            elem.addEventListener("mouseout", function() {
+                console.log("C!");
                 pipes(elem);
             });
         });
     });
 
+    let domContentLoad = () => {
+        doc_set = document.getElementsByTagName("pipe");
+        Array.from(doc_set).forEach(function(elem) {
+                try
+                {
+                        pipes(elem);
+                }
+                catch (e) {
+                        //setTimeout(pipes(elem),200);
+                }
+        });
+        setTimers();
+        let elementsArray_dyn = document.getElementsByTagName("dyn");
+        Array.from(elementsArray_dyn).forEach(function(elem) {
+
+            elem.addEventListener("click", function() {
+                pipes(elem);
+            });
+        });
+        let elements_Carousel = document.getElementsByTagName("carousel");
+        Array.from(elements_Carousel).forEach(function(elem) {
+            setTimeout(carousel(elem),700);
+        });
+        let elementsArray_link = document.getElementsByTagName("lnk");
+        Array.from(elementsArray_link).forEach(function(elem) {
+            elem.addEventListener("click", function() {
+                pipes(elem);
+            });
+        });
+        let elementsArray_mouseOver = document.getElementsByClassName("mouse-over");
+        Array.from(elementsArray_mouseOver).forEach(function(elem) {
+                elem.addEventListener("mouseenter", function() {
+                        pipes(elem, true);
+                });
+                elem.addEventListener("mouseleave", function() {
+                        pipes(elem, true);
+                });
+        });
+    }
+
     // modala(jsonObj,rootNode)
-    function modala (value, tempTag, repeat, replace, root)
+    function modala (value, tempTag, root, id)
     {
-        if (tempTag instanceof String)
+        if (id == true)
         {
             tempTag = document.getElementById(tempTag);
         }
@@ -83,14 +139,14 @@
             return;
         }
         var temp = document.createElement((value["tagname"]));
-        console.log(value);
+//        console.log(value);
         Object.entries(value).forEach((nest) => {
             const [k, v] = nest;
             if (v instanceof Object)
-                modala(v, temp, repeat, root);
+                modala(v, temp, root, id);
             else if (!Number(k) && k.toLowerCase() != "tagname" && k.toLowerCase() != "textcontent" && k.toLowerCase() != "innerhtml" && k.toLowerCase() != "innertext")
             {
-                console.log(k + " " + v);
+//                console.log(k + " " + v);
                 temp.setAttribute(k,v);
             }
             else if (!Number(k) && k.toLowerCase() != "tagname" && (k.toLowerCase() == "textcontent" || k.toLowerCase() == "innerhtml" || k.toLowerCase() == "innertext"))
@@ -98,9 +154,8 @@
                 (k.toLowerCase() == "textcontent") ? temp.textContent = v : (k.toLowerCase() == "innerhtml") ? temp.innerHTML = v : temp.innerText = v;
             }
         });
-        if (replace == true)
-            tempTag.innerHTML = "";
-        
+//        if (id == true)
+//              tempTag.innerHTML = "";
         tempTag.appendChild(temp);
     }
 
@@ -226,7 +281,7 @@
         elem.classList = arr[index];
     }
 
-    function pipes(elem) {
+    function pipes(elem, stop = false) {
 
         var query = "";
         var headers = new Map();
@@ -235,18 +290,18 @@
         if (elem === undefined)
             return;
         // obfuscated logic
-        if (elem.tagName == "link" && elem.hasAttribute("redirect"))
+        if (elem.tagName == "lnk" || elem.hasAttribute("redirect"))
         {
-            // window.location.href = elem.getAttribute("ajax") + ((elem.hasAttribute("query")) ? "?" + elem.getAttribute("query") : "");
+            window.location.href = elem.getAttribute("ajax") + (elem.hasAttribute("query") ? "?" + elem.getAttribute("query") : "");
         }
         if (elem.hasAttribute("display") && elem.getAttribute("display"))
         {
             var optsArray = elem.getAttribute("display").split(";");
             optsArray.forEach((e,f) => {
             var x = document.getElementById(e);
-            if (x.style.display !== "none")
+            if (x !== null && x.style.display !== "none")
                 x.style.display = "none";
-            else
+            else if (x !== null)
                 x.style.display = "block";
             });
         }
@@ -296,10 +351,6 @@
         {
             fileOrder(elem);
         }
-        if (elem.tagName == "carousel")
-        {
-            // carousel(elem);
-        }
         // This is a quick way to make a downloadable link in an href
     //     else
         if (elem.tagName == "download")
@@ -314,6 +365,8 @@
             document.body.removeChild(element);
             return;
         }
+        if (stop == true)
+                return;
         navigate(elem, headers, query, formclass);
     }
 
@@ -390,6 +443,12 @@
                             var func = elem.getAttribute("callback");
                             window[func](allText);
                         }
+                        console.log("...");
+                        if (elem.hasAttribute("insert"))
+                        {
+                                console.log("$$$");
+                                document.getElementById(elem.getAttribute("insert")).textContent = (rawFile.responseText);
+                        }
                         return allText;
                     }
                     catch (e)
@@ -398,7 +457,7 @@
                     }
                 }
             }
-        }
+        }   
         else if (elem.classList.contains("set-attr"))
         {
             rawFile.onreadystatechange = function() {
@@ -422,15 +481,11 @@
         {
             rawFile.onreadystatechange = function() {
                 if (rawFile.readyState === 4) {
-                    var allText = "";// JSON.parse(rawFile.responseText);
-                    try {
-                        allText = JSON.parse(rawFile.responseText);
-                    }
-                    catch (e)
-                    {
-                        allText = (rawFile.responseText);
-                    }
-                    modala(allText,elem.getAttribute("insert"),elem.classList.contains("modala-repeat"),elem.classList.contains("modala-replace"));
+                    var allText = ""; // JSON.parse(rawFile.responseText);
+                    allText = JSON.parse(rawFile.responseText);
+                    var x = document.getElementById(elem.getAttribute("insert"));
+                    x.innerHTML = "";
+                    modala(allText, x);
                     if (elem.hasAttribute("callback"))
                     {
                         var func = elem.getAttribute("callback");
@@ -459,6 +514,7 @@
                 }
             }
         }
-        rawFile.send();
+                rawFile.send();
     }
+
 
