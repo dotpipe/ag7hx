@@ -1,0 +1,1978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CST Multi-Asset 24-Hour Fractal Forecast</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #0f1319;
+      color: #edf2f7;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    h1 { margin: 0 0 8px; font-size: 25px; }
+    .description {
+      max-width: 1200px;
+      margin-bottom: 18px;
+      color: #aeb8c5;
+      line-height: 1.5;
+    }
+
+    .asset-controls {
+      display: grid;
+      grid-template-columns: minmax(230px, .8fr) minmax(300px, 1.2fr);
+      gap: 14px;
+      margin: 0 0 16px;
+      padding: 14px;
+      background: #191f28;
+      border: 1px solid #2c3542;
+      border-radius: 9px;
+    }
+    .asset-type-group, .asset-input-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .radio-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .radio-option input { width: 18px; height: 18px; accent-color: #22c55e; }
+    #assetSymbol {
+      flex: 1 1 150px;
+      min-width: 120px;
+      padding: 10px 12px;
+      border: 1px solid #3a4656;
+      border-radius: 7px;
+      background: #10151c;
+      color: #edf2f7;
+      font-size: 16px;
+      text-transform: uppercase;
+    }
+    #loadAsset {
+      padding: 10px 16px;
+      border: 0;
+      border-radius: 7px;
+      background: #22c55e;
+      color: #07110a;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    #loadAsset:disabled { opacity: .55; cursor: wait; }
+    .asset-help {
+      grid-column: 1 / -1;
+      color: #98a5b5;
+      font-size: 13px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .card {
+      padding: 14px;
+      background: #191f28;
+      border: 1px solid #2c3542;
+      border-radius: 9px;
+    }
+    .label {
+      color: #98a5b5;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+    .value {
+      margin-top: 7px;
+      font-size: 20px;
+      font-weight: bold;
+      word-break: break-word;
+    }
+    .small-value { font-size: 16px; }
+    .chart-scroll {
+      width: 100%;
+      overflow-x: auto;
+      background: #141a22;
+      border: 1px solid #2c3542;
+      border-radius: 10px;
+    }
+    .chart-inner {
+      position: relative;
+      min-width: 2500px;
+      height: 680px;
+      padding: 16px;
+    }
+    #message {
+      min-height: 25px;
+      margin-top: 14px;
+      color: #aeb8c5;
+    }
+    .good { color: #4ade80; }
+    .medium { color: #facc15; }
+    .bad { color: #fb7185; }
+    .error { color: #fb7185 !important; }
+
+    @media (max-width: 900px) {
+      .asset-controls { grid-template-columns: 1fr; }
+      .asset-help { grid-column: 1; }
+      .cards { grid-template-columns: repeat(2, 1fr); }
+      .chart-inner { min-width: 1900px; }
+    }
+  </style>
+</head>
+<body>
+  <h1>CST Multi-Asset 24-Hour Fractal Forecast</h1>
+
+  <div class="description">
+    Heads means the next hour closes above the current price. Tails means it closes below.
+    The model now generates its own 24-hour volatility path. It samples completed historical
+    segments, reflects some of them backward, refracts them forward through the current heads/tails
+    bias, and repeatedly stretches or compresses their amplitude. The result is an up-and-down,
+    self-similar forecast that grows and shrinks like a fractal instead of using one purple curve.
+  </div>
+
+  
+  <section class="asset-controls">
+    <div class="asset-type-group">
+      <span class="label">Asset type</span>
+      <label class="radio-option"><input type="radio" name="assetType" value="stock" checked><span>Stock</span></label>
+      <label class="radio-option"><input type="radio" name="assetType" value="crypto"><span>Crypto</span></label>
+    </div>
+    <div class="asset-input-group">
+      <label for="assetSymbol" class="label" id="symbolLabel">Stock ticker</label>
+      <input id="assetSymbol" type="text" value="AAPL" autocomplete="off" spellcheck="false">
+      <button id="loadAsset" type="button">Load asset</button>
+    </div>
+    <div class="asset-help" id="assetHelp">Enter a stock ticker such as AAPL, MSFT, NVDA, or TSLA.</div>
+  </section>
+
+<div class="cards">
+    <div class="card"><div class="label">Current asset
+    <div class="card">
+      <div class="label">Calibrated Hit Rate</div>
+      <div class="value" id="hitRate">--</div>
+    </div>
+
+</div><div class="value" id="currentPrice">—</div></div>
+    <div class="card"><div class="label">1-hour node</div><div class="value" id="hourGuess">—</div></div>
+    <div class="card"><div class="label">24-hour endpoint</div><div class="value" id="dayGuess">—</div></div>
+    <div class="card"><div class="label">24-hour range</div><div class="value" id="dayRange">—</div></div>
+    <div class="card"><div class="label">Forecast confidence</div><div class="value" id="confidence">—</div></div>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="label">Coin call</div><div class="value small-value" id="coinCall">—</div></div>
+    <div class="card"><div class="label">Heads reliability</div><div class="value small-value" id="headsRate">—</div></div>
+    <div class="card"><div class="label">Tails reliability</div><div class="value small-value" id="tailsRate">—</div></div>
+    <div class="card"><div class="label">Remediation node</div><div class="value small-value" id="nodeCorrection">—</div></div>
+    <div class="card"><div class="label">Node consistency</div><div class="value small-value" id="nodeConsistency">—</div></div>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="label">Stable slope</div><div class="value small-value" id="stableSlope">—</div></div>
+    <div class="card"><div class="label">Stable curvature</div><div class="value small-value" id="stableCurvature">—</div></div>
+    <div class="card"><div class="label">Hourly volatility</div><div class="value small-value" id="volatility">—</div></div>
+    <div class="card"><div class="label">Heads/Tails tolerance</div><div class="value small-value" id="coinTolerance">—</div></div>
+    <div class="card"><div class="label">Volatility-line weight</div><div class="value small-value" id="volatilityWeight">—</div></div>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="label">Model agreement</div><div class="value small-value" id="agreement">—</div></div>
+    <div class="card"><div class="label">Move cap</div><div class="value small-value" id="moveCap">—</div></div>
+    <div class="card"><div class="label">Median heads residual</div><div class="value small-value" id="headsMedian">—</div></div>
+    <div class="card"><div class="label">Median tails residual</div><div class="value small-value" id="tailsMedian">—</div></div>
+    <div class="card"><div class="label">Shared median center</div><div class="value small-value" id="sharedMedian">—</div></div>
+  </div>
+
+  <div class="chart-scroll">
+    <div class="chart-inner">
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+
+  <div id="message">Loading Bitcoin history…</div>
+
+<script>
+"use strict";
+
+const CONFIG = {
+  historyDays: 7,
+  displayedHours: 96,
+  refreshMilliseconds: 30000,
+
+  futureHours: 24,
+  futureStepMinutes: 15,
+  priceTolerance: 500,
+
+  stateWindow: 8,
+  reliabilityWindow: 30,
+
+  slopeWeight: 0.72,
+  curvatureWeight: 0.28,
+
+  minimumMoveCap: 350,
+  maximumMoveCap: 2200,
+  volatilityCapMultiple: 2.4,
+
+  // Shared heads/tails tolerance and volatility-line rolling.
+  minimumCoinTolerance: 120,
+  maximumCoinTolerance: 900,
+  volatilityLineWindow: 12,
+  futureVolatilityPersistence: 0.965,
+
+  fractalSegmentLengths: [2, 3, 4, 6, 8, 12],
+  fractalAmplitudeMin: 0.45,
+  fractalAmplitudeMax: 1.85,
+  fractalReflectionChance: 0.42,
+  fractalRefractionStrength: 0.38,
+  fractalMeanPull: 0.08
+};
+
+let chart = null;
+let updateRunning = false;
+let activeCurrency = "USD";
+let activeAssetName = "AAPL";
+
+function clamp(value, minimum, maximum) {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function median(values) {
+  const clean = values.filter(Number.isFinite).slice().sort((a, b) => a - b);
+  if (!clean.length) return 0;
+  const middle = Math.floor(clean.length / 2);
+  return clean.length % 2
+    ? clean[middle]
+    : (clean[middle - 1] + clean[middle]) / 2;
+}
+
+function average(values) {
+  const clean = values.filter(Number.isFinite);
+  if (!clean.length) return 0;
+  return clean.reduce((sum, value) => sum + value, 0) / clean.length;
+}
+
+function standardDeviation(values) {
+  const clean = values.filter(Number.isFinite);
+  if (clean.length < 2) return 0;
+  const mean = average(clean);
+  const variance = average(clean.map(value => Math.pow(value - mean, 2)));
+  return Math.sqrt(variance);
+}
+
+function formatPrice(value, signed = false, currency = activeCurrency) {
+  if (!Number.isFinite(value)) return "—";
+
+  const formatted = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0
+  }).format(Math.abs(value));
+
+  if (!signed) return value < 0 ? "-" + formatted : formatted;
+  if (value > 0) return "+" + formatted;
+  if (value < 0) return "-" + formatted;
+  return formatted;
+}
+
+function formatPercent(value) {
+  if (!Number.isFinite(value)) return "—";
+  return (value * 100).toFixed(1) + "%";
+}
+
+function confidenceClass(value) {
+  if (value >= 0.67) return "good";
+  if (value >= 0.40) return "medium";
+  return "bad";
+}
+
+function setClass(element, className) {
+  element.classList.remove("good", "medium", "bad");
+  element.classList.add(className);
+}
+
+function hourLabel(timestamp) {
+  return new Date(timestamp).toLocaleString([], {
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric"
+  });
+}
+
+function selectedAssetType() {
+  return document.querySelector('input[name="assetType"]:checked')?.value || "stock";
+}
+
+function normalizedSymbol() {
+  return document.getElementById("assetSymbol").value.trim().toUpperCase();
+}
+
+async function fetchStockPrices(symbol) {
+  if (!/^[A-Z0-9.^=-]{1,15}$/.test(symbol)) {
+    throw new Error("Enter a valid stock ticker.");
+  }
+
+  const period2 = Math.floor(Date.now() / 1000);
+  const period1 = period2 - CONFIG.historyDays * 86400;
+  const url =
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
+    `?period1=${period1}&period2=${period2}&interval=1h&includePrePost=false&events=div%2Csplits`;
+
+  const response = await fetch(url, { cache: "no-store", headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error(`Stock service returned HTTP ${response.status}.`);
+
+  const payload = await response.json();
+  const result = payload?.chart?.result?.[0];
+  if (!result) {
+    throw new Error(payload?.chart?.error?.description || `No stock data found for ${symbol}.`);
+  }
+
+  const timestamps = result.timestamp || [];
+  const closes = result.indicators?.quote?.[0]?.close || [];
+  const points = timestamps.map((timestamp, index) => ({
+    time: Number(timestamp) * 1000,
+    price: Number(closes[index])
+  })).filter(point => Number.isFinite(point.time) && Number.isFinite(point.price));
+
+  if (points.length < 20) throw new Error(`Not enough hourly stock data for ${symbol}.`);
+
+  return {
+    points,
+    displayName: result.meta?.longName || result.meta?.shortName || symbol,
+    symbol,
+    currency: result.meta?.currency || "USD"
+  };
+}
+
+async function resolveCryptoId(symbol) {
+  const aliases = {
+    BTC: "bitcoin", ETH: "ethereum", SOL: "solana", XRP: "ripple",
+    ADA: "cardano", DOGE: "dogecoin", LTC: "litecoin",
+    BCH: "bitcoin-cash", DOT: "polkadot", AVAX: "avalanche-2",
+    LINK: "chainlink", MATIC: "matic-network", SHIB: "shiba-inu"
+  };
+
+  if (aliases[symbol]) return { id: aliases[symbol], name: symbol };
+
+  const response = await fetch(
+    `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(symbol)}`,
+    { cache: "no-store", headers: { Accept: "application/json" } }
+  );
+  if (!response.ok) throw new Error(`Crypto search returned HTTP ${response.status}.`);
+
+  const payload = await response.json();
+  const exact = payload.coins?.find(coin => coin.symbol?.toUpperCase() === symbol) || payload.coins?.[0];
+  if (!exact) throw new Error(`No crypto asset found for ${symbol}.`);
+
+  return { id: exact.id, name: exact.name || symbol };
+}
+
+async function fetchCryptoPrices(symbol) {
+  const crypto = await resolveCryptoId(symbol);
+  const url =
+    `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(crypto.id)}/market_chart` +
+    `?vs_currency=usd&days=${CONFIG.historyDays}`;
+
+  const response = await fetch(url, { cache: "no-store", headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error(`CoinGecko returned HTTP ${response.status}.`);
+
+  const payload = await response.json();
+  if (!payload || !Array.isArray(payload.prices)) {
+    throw new Error(`No crypto history returned for ${symbol}.`);
+  }
+
+  const points = payload.prices.map(item => ({
+    time: Number(item[0]),
+    price: Number(item[1])
+  })).filter(point => Number.isFinite(point.time) && Number.isFinite(point.price));
+
+  if (points.length < 20) throw new Error(`Not enough crypto history for ${symbol}.`);
+
+  return { points, displayName: crypto.name, symbol, currency: "USD" };
+}
+
+async function fetchSelectedAsset() {
+  const type = selectedAssetType();
+  const symbol = normalizedSymbol();
+
+  if (!symbol) {
+    throw new Error(type === "stock" ? "Enter a stock ticker." : "Enter a crypto symbol.");
+  }
+
+  return type === "stock" ? fetchStockPrices(symbol) : fetchCryptoPrices(symbol);
+}
+
+function toHourly(points) {
+  const buckets = new Map();
+
+  for (const point of points) {
+    const hour = Math.floor(point.time / 3600000) * 3600000;
+    buckets.set(hour, { time: hour, price: point.price });
+  }
+
+  return [...buckets.values()].sort((a, b) => a.time - b.time);
+}
+
+function calculateState(prices) {
+  if (prices.length < 5) {
+    throw new Error("Not enough history for CST state.");
+  }
+
+  const slopes = [];
+  for (let index = 1; index < prices.length; index++) {
+    slopes.push(prices[index] - prices[index - 1]);
+  }
+
+  const curvatures = [];
+  for (let index = 1; index < slopes.length; index++) {
+    curvatures.push(slopes[index] - slopes[index - 1]);
+  }
+
+  const recentSlopes = slopes.slice(-CONFIG.stateWindow);
+  const recentCurvatures = curvatures.slice(-CONFIG.stateWindow);
+
+  const stableSlope = median(recentSlopes);
+  const stableCurvature = median(recentCurvatures);
+
+  const volatility = Math.max(
+    median(recentSlopes.map(Math.abs)),
+    standardDeviation(recentSlopes),
+    1
+  );
+
+  const latestPrice = prices[prices.length - 1];
+  const rollingMean = average(prices.slice(-CONFIG.stateWindow));
+  const meanDistance = latestPrice - rollingMean;
+
+  return {
+    latestPrice,
+    stableSlope,
+    stableCurvature,
+    volatility,
+    rollingMean,
+    meanDistance
+  };
+}
+
+function calculateFlippedContext(state) {
+  const scale = state.volatility + 1;
+
+  const slopePressure = Math.abs(state.stableSlope) / scale;
+  const curvaturePressure = Math.abs(state.stableCurvature) / scale;
+
+  const reversalPressure =
+    Math.sign(state.stableSlope) !==
+    Math.sign(state.stableSlope + state.stableCurvature)
+      ? 0.45
+      : 0;
+
+  return clamp(
+    1 /
+      (
+        1 +
+        0.35 * slopePressure +
+        0.55 * curvaturePressure +
+        reversalPressure
+      ),
+    0,
+    1
+  );
+}
+
+function calculateCandidateMoves(state, flippedContext) {
+  const trendMove = state.stableSlope;
+
+  const curvatureMove =
+    state.stableSlope +
+    CONFIG.curvatureWeight * state.stableCurvature;
+
+  const meanReversionMove =
+    -0.30 * state.meanDistance;
+
+  const cstMove =
+    (
+      CONFIG.slopeWeight * state.stableSlope +
+      CONFIG.curvatureWeight * state.stableCurvature
+    ) *
+    flippedContext;
+
+  return {
+    trendMove,
+    curvatureMove,
+    meanReversionMove,
+    cstMove
+  };
+}
+
+function calculateAgreement(candidates, volatility) {
+  const values = [
+    candidates.trendMove,
+    candidates.curvatureMove,
+    candidates.meanReversionMove,
+    candidates.cstMove
+  ];
+
+  const spread = standardDeviation(values);
+
+  return clamp(
+    Math.exp(-spread / (volatility * 1.5 + 1)),
+    0,
+    1
+  );
+}
+
+function directionOf(value, deadZone = 0) {
+  if (value > deadZone) return 1;
+  if (value < -deadZone) return -1;
+  return 0;
+}
+
+function sameDirection(a, b) {
+  return a !== 0 && a === b;
+}
+
+function smoothedRate(successes, attempts) {
+  return (successes + 1) / (attempts + 2);
+}
+
+function createRawForecast(prices) {
+  const state = calculateState(prices);
+  const flippedContext = calculateFlippedContext(state);
+
+  const candidates =
+    calculateCandidateMoves(state, flippedContext);
+
+  const agreement =
+    calculateAgreement(candidates, state.volatility);
+
+  const rawMove =
+    0.62 * candidates.cstMove +
+    0.23 * candidates.trendMove +
+    0.15 * candidates.meanReversionMove;
+
+  return {
+    state,
+    flippedContext,
+    candidates,
+    agreement,
+    rawMove,
+    predictedDirection: directionOf(rawMove)
+  };
+}
+
+function buildDirectionalTrials(prices) {
+  const trials = [];
+  const minimumHistory = CONFIG.stateWindow + 5;
+
+  for (
+    let targetIndex = minimumHistory;
+    targetIndex < prices.length;
+    targetIndex++
+  ) {
+    const training = prices.slice(0, targetIndex);
+    const currentPrice = training[training.length - 1];
+    const actualPrice = prices[targetIndex];
+
+    const raw = createRawForecast(training);
+
+    const moveCap = clamp(
+      raw.state.volatility * CONFIG.volatilityCapMultiple,
+      CONFIG.minimumMoveCap,
+      CONFIG.maximumMoveCap
+    );
+
+    const preliminaryConfidence = clamp(
+      0.55 * raw.flippedContext +
+      0.45 * raw.agreement,
+      0,
+      1
+    );
+
+    const originalMove = clamp(
+      raw.rawMove * preliminaryConfidence,
+      -moveCap,
+      moveCap
+    );
+
+    const originalGuess = currentPrice + originalMove;
+    const actualMove = actualPrice - currentPrice;
+
+    const predictedDirection = directionOf(originalMove);
+    const actualDirection = directionOf(actualMove);
+
+    const error = Math.abs(actualPrice - originalGuess);
+
+    trials.push({
+      targetIndex,
+      currentPrice,
+      actualPrice,
+      rawMove: raw.rawMove,
+      originalMove,
+      originalGuess,
+      predictedDirection,
+      actualDirection,
+      directionCorrect: sameDirection(
+        predictedDirection,
+        actualDirection
+      ),
+      residual: actualPrice - originalGuess,
+      error,
+      hit: error <= CONFIG.priceTolerance,
+      volatility: raw.state.volatility,
+      agreement: raw.agreement,
+      flippedContext: raw.flippedContext
+    });
+  }
+
+  return trials;
+}
+
+function analyzeDirectionalCoin(trials) {
+  const recent = trials.slice(-CONFIG.reliabilityWindow);
+
+  const upTrials =
+    recent.filter(trial => trial.predictedDirection === 1);
+
+  const downTrials =
+    recent.filter(trial => trial.predictedDirection === -1);
+
+  const correctUp =
+    upTrials.filter(trial => trial.actualDirection === 1).length;
+
+  const correctDown =
+    downTrials.filter(trial => trial.actualDirection === -1).length;
+
+  const overallCorrect =
+    recent.filter(trial => trial.directionCorrect).length;
+
+  return {
+    recent,
+    upTrials: upTrials.length,
+    downTrials: downTrials.length,
+    correctUp,
+    correctDown,
+    upReliability: smoothedRate(correctUp, upTrials.length),
+    downReliability: smoothedRate(correctDown, downTrials.length),
+    overallReliability: smoothedRate(overallCorrect, recent.length)
+  };
+}
+
+
+/* ---------------------------------------------------------
+   SHARED HEADS / TAILS TOLERANCE
+
+   The two sides of the directional coin should not be treated
+   as unrelated forecasts. We find the median landing residual
+   for heads and tails, then find a shared center and a robust
+   tolerance around both sides.
+
+   This tolerance becomes the node's operating corridor.
+--------------------------------------------------------- */
+
+function analyzeCoinTolerance(trials) {
+  const recent = trials.slice(-CONFIG.reliabilityWindow);
+
+  const heads = recent.filter(trial =>
+    trial.predictedDirection === 1
+  );
+
+  const tails = recent.filter(trial =>
+    trial.predictedDirection === -1
+  );
+
+  const headsResiduals =
+    heads.map(trial => trial.residual);
+
+  const tailsResiduals =
+    tails.map(trial => trial.residual);
+
+  const headsMedian = median(headsResiduals);
+  const tailsMedian = median(tailsResiduals);
+
+  /*
+   * The shared center is the median of the two directional
+   * medians. It is neutral between heads and tails.
+   */
+  const sharedMedian = median([
+    headsMedian,
+    tailsMedian
+  ]);
+
+  const allResiduals =
+    headsResiduals.concat(tailsResiduals);
+
+  const absoluteDistances = allResiduals.map(value =>
+    Math.abs(value - sharedMedian)
+  );
+
+  const medianDistance =
+    median(absoluteDistances);
+
+  /*
+   * The tolerance is robust and cannot explode from one
+   * extreme candle.
+   */
+  const tolerance = clamp(
+    medianDistance * 1.4826,
+    CONFIG.minimumCoinTolerance,
+    CONFIG.maximumCoinTolerance
+  );
+
+  const insideTolerance = allResiduals.filter(value =>
+    Math.abs(value - sharedMedian) <= tolerance
+  ).length;
+
+  const toleranceReliability = smoothedRate(
+    insideTolerance,
+    allResiduals.length
+  );
+
+  return {
+    headsMedian,
+    tailsMedian,
+    sharedMedian,
+    tolerance,
+    toleranceReliability,
+    headsCount: heads.length,
+    tailsCount: tails.length
+  };
+}
+
+/* ---------------------------------------------------------
+   EXISTING VOLATILITY LINE
+
+   This estimates the recent path of realized hourly movement,
+   not just its magnitude. The future is rolled forward along
+   this line, while the coin node gently bends the landing.
+--------------------------------------------------------- */
+
+function calculateVolatilityLine(prices) {
+  const changes = [];
+
+  for (let index = 1; index < prices.length; index++) {
+    changes.push(prices[index] - prices[index - 1]);
+  }
+
+  const recent =
+    changes.slice(-CONFIG.volatilityLineWindow);
+
+  if (!recent.length) {
+    return {
+      lineMove: 0,
+      persistence: 0,
+      volatility: 1
+    };
+  }
+
+  const weights = recent.map((_, index) =>
+    index + 1
+  );
+
+  const weightTotal =
+    weights.reduce((sum, value) => sum + value, 0);
+
+  const weightedMove =
+    recent.reduce(
+      (sum, value, index) =>
+        sum + value * weights[index],
+      0
+    ) / weightTotal;
+
+  const signs = recent.map(value =>
+    directionOf(value)
+  );
+
+  let sameDirectionCount = 0;
+
+  for (let index = 1; index < signs.length; index++) {
+    if (sameDirection(signs[index], signs[index - 1])) {
+      sameDirectionCount++;
+    }
+  }
+
+  const persistence = signs.length > 1
+    ? sameDirectionCount / (signs.length - 1)
+    : 0;
+
+  const volatility = Math.max(
+    standardDeviation(recent),
+    median(recent.map(Math.abs)),
+    1
+  );
+
+  /*
+   * Higher persistence lets more of the existing volatility
+   * line continue. Choppy action contracts it.
+   */
+  const lineMove =
+    weightedMove *
+    (0.35 + 0.65 * persistence);
+
+  return {
+    lineMove,
+    persistence,
+    volatility
+  };
+}
+
+function calculateRemediationNode(trials, predictedDirection) {
+  const matching = trials
+    .slice(-CONFIG.reliabilityWindow)
+    .filter(trial =>
+      trial.predictedDirection === predictedDirection
+    );
+
+  if (!matching.length) {
+    return {
+      residualNode: 0,
+      residualSpread: 0,
+      consistency: 0,
+      matchingCount: 0,
+      nearHitRate: 0
+    };
+  }
+
+  const useful = matching.filter(trial =>
+    trial.directionCorrect ||
+    trial.error <= CONFIG.priceTolerance * 2
+  );
+
+  const source = useful.length >= 3 ? useful : matching;
+  const residualNode = median(source.map(trial => trial.residual));
+
+  const residualSpread = median(
+    source.map(trial =>
+      Math.abs(trial.residual - residualNode)
+    )
+  );
+
+  const consistency = clamp(
+    1 -
+    residualSpread / (CONFIG.priceTolerance * 2),
+    0,
+    1
+  );
+
+  const nearHits = source.filter(trial =>
+    Math.abs(trial.residual - residualNode) <=
+    CONFIG.priceTolerance
+  ).length;
+
+  return {
+    residualNode,
+    residualSpread,
+    consistency,
+    matchingCount: source.length,
+    nearHitRate: smoothedRate(nearHits, source.length)
+  };
+}
+
+function calibrateMoveMultiplier(trials, predictedDirection) {
+  const matching = trials
+    .slice(-CONFIG.reliabilityWindow)
+    .filter(trial =>
+      trial.predictedDirection === predictedDirection
+    );
+
+  if (matching.length < 4) {
+    return {
+      multiplier: 1,
+      calibratedHitRate: 0.5,
+      calibratedAverageError: CONFIG.priceTolerance
+    };
+  }
+
+  const candidates = [
+    0.25, 0.40, 0.55, 0.70,
+    0.85, 1.00, 1.15, 1.30
+  ];
+
+  let best = null;
+
+  for (const multiplier of candidates) {
+    let hits = 0;
+    let directionHits = 0;
+    let totalError = 0;
+
+    for (const trial of matching) {
+      const guess =
+        trial.currentPrice +
+        trial.originalMove * multiplier;
+
+      const error =
+        Math.abs(trial.actualPrice - guess);
+
+      const predictedMove =
+        guess - trial.currentPrice;
+
+      const directionCorrect =
+        sameDirection(
+          directionOf(predictedMove),
+          trial.actualDirection
+        );
+
+      if (error <= CONFIG.priceTolerance) hits++;
+      if (directionCorrect) directionHits++;
+
+      totalError += error;
+    }
+
+    const hitRate = hits / matching.length;
+    const directionRate = directionHits / matching.length;
+    const averageError = totalError / matching.length;
+
+    const score =
+      hitRate * 4 +
+      directionRate * 1.25 -
+      averageError / (CONFIG.priceTolerance * 4) -
+      Math.abs(multiplier - 1) * 0.08;
+
+    if (!best || score > best.score) {
+      best = {
+        score,
+        multiplier,
+        calibratedHitRate: hitRate,
+        calibratedAverageError: averageError
+      };
+    }
+  }
+
+  return best;
+}
+
+function createForecast(prices) {
+  const raw = createRawForecast(prices);
+  const trials = buildDirectionalTrials(prices);
+  const coin = analyzeDirectionalCoin(trials);
+
+  const coinTolerance =
+    analyzeCoinTolerance(trials);
+
+  const volatilityLine =
+    calculateVolatilityLine(prices);
+
+  const predictedDirection =
+    raw.predictedDirection || directionOf(
+      volatilityLine.lineMove
+    ) || 1;
+
+  const directionReliability =
+    predictedDirection === 1
+      ? coin.upReliability
+      : coin.downReliability;
+
+  const remediation =
+    calculateRemediationNode(
+      trials,
+      predictedDirection
+    );
+
+  const calibration =
+    calibrateMoveMultiplier(
+      trials,
+      predictedDirection
+    );
+
+  const currentPrice =
+    prices[prices.length - 1];
+
+  const moveCap = clamp(
+    Math.max(
+      raw.state.volatility,
+      volatilityLine.volatility
+    ) *
+      CONFIG.volatilityCapMultiple,
+    CONFIG.minimumMoveCap,
+    CONFIG.maximumMoveCap
+  );
+
+  /*
+   * Directional residual is pulled toward the neutral shared
+   * median. This is the tolerance between heads and tails.
+   */
+  const directionalMedian =
+    predictedDirection === 1
+      ? coinTolerance.headsMedian
+      : coinTolerance.tailsMedian;
+
+  const directionalOffset =
+    directionalMedian -
+    coinTolerance.sharedMedian;
+
+  const nodeConfidence = clamp(
+    0.35 * remediation.consistency +
+    0.30 * remediation.nearHitRate +
+    0.20 * coinTolerance.toleranceReliability +
+    0.15 * directionReliability,
+    0,
+    1
+  );
+
+  const toleranceBoundedNode = clamp(
+    directionalOffset,
+    -coinTolerance.tolerance,
+    coinTolerance.tolerance
+  ) * nodeConfidence;
+
+  /*
+   * Blend:
+   * - existing realized volatility line,
+   * - CST directional forecast,
+   * - shared heads/tails remediation node.
+   */
+  const volatilityWeight = clamp(
+    0.45 +
+    0.35 * volatilityLine.persistence +
+    0.20 * coinTolerance.toleranceReliability,
+    0.45,
+    0.90
+  );
+
+  const cstDirectionalMove =
+    raw.rawMove *
+    calibration.multiplier *
+    directionReliability;
+
+  const blendedMove =
+    volatilityLine.lineMove * volatilityWeight +
+    cstDirectionalMove * (1 - volatilityWeight) +
+    toleranceBoundedNode;
+
+  const agreementConfidence = clamp(
+    0.30 * raw.agreement +
+    0.20 * raw.flippedContext +
+    0.20 * directionReliability +
+    0.15 * coinTolerance.toleranceReliability +
+    0.15 * nodeConfidence,
+    0,
+    1
+  );
+
+  const finalMove = clamp(
+    blendedMove *
+    (0.55 + 0.45 * agreementConfidence),
+    -moveCap,
+    moveCap
+  );
+
+  const hourGuess =
+    currentPrice + finalMove;
+
+  const confidence = clamp(
+    0.24 * directionReliability +
+    0.22 * calibration.calibratedHitRate +
+    0.18 * remediation.nearHitRate +
+    0.16 * coinTolerance.toleranceReliability +
+    0.12 * raw.agreement +
+    0.08 * volatilityLine.persistence,
+    0,
+    1
+  );
+
+  const totalHits =
+    trials.filter(
+      trial =>
+        trial.error <= CONFIG.priceTolerance
+    ).length;
+
+  const historicalHitRate =
+    trials.length
+      ? totalHits / trials.length
+      : 0;
+
+  return {
+    ...raw,
+    trials,
+    coin,
+    coinTolerance,
+    volatilityLine,
+    calibration,
+    remediation,
+    predictedDirection,
+    directionReliability,
+    nodeConfidence,
+    toleranceBoundedNode,
+    volatilityWeight,
+    cstDirectionalMove,
+    blendedMove,
+    agreementConfidence,
+    finalMove,
+    hourGuess,
+    confidence,
+    moveCap,
+    historicalHitRate
+  };
+}
+
+function smoothStep(value) {
+  return value * value * (3 - 2 * value);
+}
+
+function seededRandom(seed) {
+  let value = seed >>> 0;
+
+  return function random() {
+    value += 0x6D2B79F5;
+    let result = value;
+    result = Math.imul(result ^ (result >>> 15), result | 1);
+    result ^= result + Math.imul(result ^ (result >>> 7), result | 61);
+    return ((result ^ (result >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hashPrices(prices) {
+  let hash = 2166136261;
+
+  for (const price of prices.slice(-32)) {
+    const rounded = Math.round(price * 100);
+    hash ^= rounded;
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return hash >>> 0;
+}
+
+function normalizedHistoricalMoves(prices) {
+  const changes = [];
+
+  for (let index = 1; index < prices.length; index++) {
+    changes.push(prices[index] - prices[index - 1]);
+  }
+
+  const scale = Math.max(
+    median(changes.map(Math.abs)),
+    standardDeviation(changes),
+    1
+  );
+
+  return changes.map(change => change / scale);
+}
+
+function chooseHistoricalSegment(moves, length, random) {
+  if (moves.length <= length) {
+    return moves.slice();
+  }
+
+  const maximumStart = moves.length - length;
+  const start = Math.floor(random() * (maximumStart + 1));
+  return moves.slice(start, start + length);
+}
+
+/* ---------------------------------------------------------
+   24-HOUR FRACTAL VOLATILITY GENERATOR
+
+   Each future section is made from an actual historical shape:
+   - normal segment: reused in its original order,
+   - reflected segment: reversed and directionally mirrored,
+   - refracted segment: bent toward the present coin bias,
+   - expanded/compressed segment: amplitude changes by scale.
+
+   Shorter segments create small ripples. Longer segments form
+   the larger 24-hour volatility body.
+--------------------------------------------------------- */
+
+function buildFractalFuture(prices, forecast) {
+  const steps =
+    Math.round(
+      CONFIG.futureHours * 60 /
+      CONFIG.futureStepMinutes
+    );
+
+  const normalizedMoves =
+    normalizedHistoricalMoves(prices);
+
+  const seed =
+    hashPrices(prices) ^
+    Math.round(forecast.hourGuess * 100);
+
+  const random = seededRandom(seed);
+
+  const currentPrice =
+    prices[prices.length - 1];
+
+  const baseVolatility = Math.max(
+    forecast.state.volatility,
+    forecast.volatilityLine.volatility,
+    1
+  );
+
+  const directionBias =
+    forecast.predictedDirection *
+    (
+      forecast.directionReliability - 0.5
+    ) *
+    2;
+
+  const toleranceScale =
+    forecast.coinTolerance.tolerance /
+    Math.max(baseVolatility, 1);
+
+  const path = [];
+  let price = currentPrice;
+  let step = 0;
+  let previousMove =
+    forecast.volatilityLine.lineMove /
+    Math.max(
+      1,
+      60 / CONFIG.futureStepMinutes
+    );
+
+  while (step < steps) {
+    const availableLengths =
+      CONFIG.fractalSegmentLengths.filter(
+        length => length <= steps - step
+      );
+
+    const segmentLength =
+      availableLengths[
+        Math.floor(random() * availableLengths.length)
+      ] || 1;
+
+    let segment =
+      chooseHistoricalSegment(
+        normalizedMoves,
+        segmentLength,
+        random
+      );
+
+    if (!segment.length) {
+      segment = [directionBias || 0.1];
+    }
+
+    const reflected =
+      random() < CONFIG.fractalReflectionChance;
+
+    if (reflected) {
+      /*
+       * Reflection: a segment that has already occurred is
+       * reversed and mirrored around zero.
+       */
+      segment = segment
+        .slice()
+        .reverse()
+        .map(value => -value);
+    }
+
+    const cycle =
+      Math.sin(
+        (step / steps) *
+        Math.PI *
+        (2 + Math.floor(random() * 5))
+      );
+
+    const fractalScale =
+      CONFIG.fractalAmplitudeMin +
+      random() *
+      (
+        CONFIG.fractalAmplitudeMax -
+        CONFIG.fractalAmplitudeMin
+      );
+
+    /*
+     * Alternate expansion and compression by segment.
+     * The tolerance median limits runaway enlargement.
+     */
+    const scaleLimit = clamp(
+      fractalScale *
+      (0.75 + 0.35 * Math.abs(cycle)) *
+      (0.85 + 0.15 * toleranceScale),
+      CONFIG.fractalAmplitudeMin,
+      CONFIG.fractalAmplitudeMax
+    );
+
+    for (
+      let localIndex = 0;
+      localIndex < segment.length && step < steps;
+      localIndex++, step++
+    ) {
+      const progress =
+        (step + 1) / steps;
+
+      const rawShape =
+        segment[localIndex];
+
+      /*
+       * Refraction bends the reused historical shape toward
+       * the current forward directional context.
+       */
+      const refraction =
+        directionBias *
+        CONFIG.fractalRefractionStrength *
+        (
+          0.35 +
+          0.65 * Math.sin(progress * Math.PI)
+        );
+
+      /*
+       * Nested oscillation creates smaller waves riding the
+       * larger reflected/refracted segment.
+       */
+      const nestedWave =
+        Math.sin(
+          progress * Math.PI * 8 +
+          localIndex * 1.7
+        ) *
+        (
+          0.12 +
+          0.20 * random()
+        );
+
+      const targetMove =
+        (
+          rawShape * scaleLimit +
+          refraction +
+          nestedWave
+        ) *
+        baseVolatility *
+        (
+          CONFIG.futureStepMinutes / 60
+        );
+
+      /*
+       * Preserve continuity with the existing volatility line.
+       */
+      const continuity =
+        0.38 +
+        0.30 *
+        forecast.volatilityLine.persistence;
+
+      let move =
+        previousMove * continuity +
+        targetMove * (1 - continuity);
+
+      /*
+       * Fractal amplitudes may get larger or smaller, but the
+       * robust coin tolerance acts as a local step boundary.
+       */
+      const localCap =
+        forecast.coinTolerance.tolerance *
+        (
+          0.22 +
+          0.25 * scaleLimit
+        );
+
+      move = clamp(
+        move,
+        -localCap,
+        localCap
+      );
+
+      /*
+       * Gentle pull prevents endless drift while retaining the
+       * up/down volatility structure.
+       */
+      const meanPull =
+        (currentPrice - price) *
+        CONFIG.fractalMeanPull *
+        (
+          CONFIG.futureStepMinutes / 60
+        );
+
+      price += move + meanPull;
+      previousMove = move;
+
+      const horizonConfidence = clamp(
+        forecast.confidence *
+        (
+          1 -
+          0.42 * progress
+        ),
+        0,
+        1
+      );
+
+      const envelope =
+        forecast.coinTolerance.tolerance *
+        (
+          0.55 +
+          1.35 * Math.sqrt(progress)
+        );
+
+      path.push({
+        step: step + 1,
+        minutes:
+          (step + 1) *
+          CONFIG.futureStepMinutes,
+        price,
+        confidence: horizonConfidence,
+        upper: price + envelope,
+        lower: price - envelope,
+        reflected,
+        scale: scaleLimit
+      });
+    }
+  }
+
+  return path;
+}
+
+function buildHistoricalForecasts(prices) {
+  const guesses = Array(prices.length).fill(null);
+  const hits = Array(prices.length).fill(null);
+  const misses = Array(prices.length).fill(null);
+
+  const minimumHistory = CONFIG.stateWindow + 5;
+
+  for (
+    let targetIndex = minimumHistory;
+    targetIndex < prices.length;
+    targetIndex++
+  ) {
+    const training = prices.slice(0, targetIndex);
+    const forecast = createForecast(training);
+    const guess = forecast.hourGuess;
+
+    guesses[targetIndex] = guess;
+
+    const error =
+      Math.abs(prices[targetIndex] - guess);
+
+    if (error <= CONFIG.priceTolerance) {
+      hits[targetIndex] = guess;
+    } else {
+      misses[targetIndex] = guess;
+    }
+  }
+
+  return { guesses, hits, misses };
+}
+
+function buildChartData(hourly, forecast, futurePath) {
+  const prices =
+    hourly.map(point => point.price);
+
+  const historical =
+    buildHistoricalForecasts(prices);
+
+  const historicalLabels =
+    hourly.map(point => hourLabel(point.time));
+
+  const latestTime =
+    hourly[hourly.length - 1].time;
+
+  const futureLabels =
+    futurePath.map(point => {
+      return new Date(
+        latestTime +
+        point.minutes * 60000
+      ).toLocaleString([], {
+        month: "numeric",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+      });
+    });
+
+  const labels =
+    historicalLabels.concat(futureLabels);
+
+  const futureLength =
+    futurePath.length;
+
+  const actualLine =
+    prices.concat(
+      Array(futureLength).fill(null)
+    );
+
+  const historicalGuessLine =
+    historical.guesses.concat(
+      Array(futureLength).fill(null)
+    );
+
+  const futureLine =
+    Array(prices.length - 1)
+      .fill(null)
+      .concat([prices[prices.length - 1]])
+      .concat(
+        futurePath.map(point => point.price)
+      );
+
+  const upperBand =
+    Array(prices.length)
+      .fill(null)
+      .concat(
+        futurePath.map(point => point.upper)
+      );
+
+  const lowerBand =
+    Array(prices.length)
+      .fill(null)
+      .concat(
+        futurePath.map(point => point.lower)
+      );
+
+  const hitPoints =
+    historical.hits.concat(
+      Array(futureLength).fill(null)
+    );
+
+  const missPoints =
+    historical.misses.concat(
+      Array(futureLength).fill(null)
+    );
+
+  const endpoint =
+    Array(labels.length).fill(null);
+
+  endpoint[labels.length - 1] =
+    futurePath.length
+      ? futurePath[futurePath.length - 1].price
+      : forecast.hourGuess;
+
+  return {
+    labels,
+    actualLine,
+    historicalGuessLine,
+    futureLine,
+    upperBand,
+    lowerBand,
+    hitPoints,
+    missPoints,
+    endpoint
+  };
+}
+
+function renderChart(data) {
+  const datasets = [
+    {
+      label: "Actual hourly price",
+      data: data.actualLine,
+      borderColor: "#f59e0b",
+      backgroundColor: "#f59e0b",
+      borderWidth: 2,
+      pointRadius: 2,
+      tension: 0.15,
+      spanGaps: false
+    },
+    {
+      label: "Historical CST guesses",
+      data: data.historicalGuessLine,
+      borderColor: "#60a5fa",
+      backgroundColor: "#60a5fa",
+      borderWidth: 1.5,
+      pointRadius: 2,
+      borderDash: [4, 4],
+      tension: 0.12,
+      spanGaps: true
+    },
+    {
+      label: "Lower confidence boundary",
+      data: data.lowerBand,
+      borderColor: "rgba(34,197,94,0.20)",
+      backgroundColor: "rgba(34,197,94,0.06)",
+      borderWidth: 1,
+      pointRadius: 0,
+      tension: 0.18,
+      spanGaps: false
+    },
+    {
+      label: "Coupled confidence range",
+      data: data.upperBand,
+      borderColor: "rgba(34,197,94,0.20)",
+      backgroundColor: "rgba(34,197,94,0.12)",
+      borderWidth: 1,
+      pointRadius: 0,
+      tension: 0.18,
+      fill: "-1",
+      spanGaps: false
+    },
+    {
+      label: "24-hour self-generated fractal volatility",
+      data: data.futureLine,
+      borderColor: "#22c55e",
+      backgroundColor: "#22c55e",
+      borderWidth: 3,
+      pointRadius(context) {
+        const start =
+          data.labels.length -
+          Math.round(
+            CONFIG.futureHours * 60 /
+            CONFIG.futureStepMinutes
+          );
+
+        if (context.dataIndex < start) {
+          return 0;
+        }
+
+        const futureStep =
+          context.dataIndex - start + 1;
+
+        const stepsPerHour =
+          60 / CONFIG.futureStepMinutes;
+
+        return futureStep % stepsPerHour === 0
+          ? 4
+          : 0;
+      },
+      tension: 0.22,
+      spanGaps: true
+    },
+    {
+      label: `Historical hits within $${CONFIG.priceTolerance}`,
+      data: data.hitPoints,
+      borderColor: "#4ade80",
+      backgroundColor: "#4ade80",
+      pointRadius: 6,
+      pointStyle: "circle",
+      showLine: false
+    },
+    {
+      label: "Historical misses",
+      data: data.missPoints,
+      borderColor: "#fb7185",
+      backgroundColor: "#fb7185",
+      pointRadius: 5,
+      pointStyle: "crossRot",
+      showLine: false
+    },
+    {
+      label: "24-hour fractal endpoint",
+      data: data.endpoint,
+      borderColor: "#ffffff",
+      backgroundColor: "#ffffff",
+      pointRadius: 9,
+      pointStyle: "star",
+      showLine: false
+    }
+  ];
+
+  if (!chart) {
+    chart = new Chart(
+      document.getElementById("chart"),
+      {
+        type: "line",
+        data: {
+          labels: data.labels,
+          datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          normalized: true,
+          interaction: {
+            mode: "index",
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              labels: {
+                color: "#d9e1ea",
+                usePointStyle: true
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label(context) {
+                  const label =
+                    context.dataset.label || "";
+
+                  return (
+                    `${label}: ` +
+                    formatPrice(context.parsed.y)
+                  );
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: {
+                color: "#aab5c2",
+                maxRotation: 45,
+                minRotation: 45,
+                autoSkip: true,
+                maxTicksLimit: 48
+              },
+              grid: {
+                color: "rgba(255,255,255,0.045)"
+              },
+              title: {
+                display: true,
+                color: "#d9e1ea",
+                text:
+                  "Historical hours followed by 24 hours of self-generated fractal volatility"
+              }
+            },
+            y: {
+              ticks: {
+                color: "#aab5c2",
+                callback(value) {
+                  return "$" + Number(value).toLocaleString();
+                }
+              },
+              grid: {
+                color: "rgba(255,255,255,0.07)"
+              },
+              title: {
+                display: true,
+                color: "#d9e1ea",
+                text:
+                  "Actual price, reflected/refracted fractal forecast, and volatility envelope"
+              }
+            }
+          }
+        }
+      }
+    );
+
+    return;
+  }
+
+  chart.data.labels = data.labels;
+  chart.data.datasets = datasets;
+  chart.update("none");
+}
+
+function updateStatus(forecast) {
+  document.getElementById("currentPrice").textContent =
+    formatPrice(forecast.state.latestPrice);
+
+  document.getElementById("hourGuess").textContent =
+    formatPrice(forecast.hourGuess);
+
+  const futurePath =
+    forecast.futurePath || [];
+
+  const futurePrices =
+    futurePath.map(point => point.price);
+
+  const dayEndpoint =
+    futurePrices.length
+      ? futurePrices[futurePrices.length - 1]
+      : forecast.hourGuess;
+
+  const dayMinimum =
+    futurePrices.length
+      ? Math.min(...futurePrices)
+      : forecast.hourGuess;
+
+  const dayMaximum =
+    futurePrices.length
+      ? Math.max(...futurePrices)
+      : forecast.hourGuess;
+
+  document.getElementById("dayGuess").textContent =
+    formatPrice(dayEndpoint);
+
+  document.getElementById("dayRange").textContent =
+    formatPrice(dayMinimum) +
+    " – " +
+    formatPrice(dayMaximum);
+
+  const projectedMoveElement =
+    document.getElementById("projectedMove");
+
+  if (projectedMoveElement) {
+    projectedMoveElement.textContent =
+      formatPrice(forecast.finalMove, true);
+  }
+
+  document.getElementById("confidence").textContent =
+    formatPercent(forecast.confidence);
+
+  const hitRateElement=document.getElementById("hitRate");
+if(hitRateElement){hitRateElement.textContent=formatPercent(
+      forecast.calibration.calibratedHitRate
+    );}
+
+  document.getElementById("stableSlope").textContent =
+    formatPrice(forecast.state.stableSlope, true);
+
+  document.getElementById("stableCurvature").textContent =
+    formatPrice(
+      forecast.state.stableCurvature,
+      true
+    );
+
+  document.getElementById("volatility").textContent =
+    formatPrice(forecast.state.volatility);
+
+  document.getElementById("agreement").textContent =
+    formatPercent(forecast.agreement);
+
+  document.getElementById("moveCap").textContent =
+    "±" + formatPrice(forecast.moveCap);
+
+  document.getElementById("coinTolerance").textContent =
+    "±" + formatPrice(
+      forecast.coinTolerance.tolerance
+    );
+
+  document.getElementById("volatilityWeight").textContent =
+    formatPercent(forecast.volatilityWeight);
+
+  document.getElementById("headsMedian").textContent =
+    formatPrice(
+      forecast.coinTolerance.headsMedian,
+      true
+    );
+
+  document.getElementById("tailsMedian").textContent =
+    formatPrice(
+      forecast.coinTolerance.tailsMedian,
+      true
+    );
+
+  document.getElementById("sharedMedian").textContent =
+    formatPrice(
+      forecast.coinTolerance.sharedMedian,
+      true
+    );
+
+  document.getElementById("coinCall").textContent =
+    forecast.predictedDirection === 1
+      ? "HEADS / UP"
+      : "TAILS / DOWN";
+
+  document.getElementById("headsRate").textContent =
+    formatPercent(forecast.coin.upReliability) +
+    ` (${forecast.coin.correctUp}/${forecast.coin.upTrials})`;
+
+  document.getElementById("tailsRate").textContent =
+    formatPercent(forecast.coin.downReliability) +
+    ` (${forecast.coin.correctDown}/${forecast.coin.downTrials})`;
+
+  document.getElementById("nodeCorrection").textContent =
+    formatPrice(forecast.nodeCorrection, true);
+
+  document.getElementById("nodeConsistency").textContent =
+    formatPercent(
+      forecast.remediation.consistency
+    );
+
+  setClass(
+    document.getElementById("confidence"),
+    confidenceClass(forecast.confidence)
+  );
+
+  setClass(
+    document.getElementById("hitRate"),
+    confidenceClass(
+      forecast.calibration.calibratedHitRate
+    )
+  );
+}
+
+async function update() {
+  if (updateRunning) return;
+
+  updateRunning = true;
+  const loadButton = document.getElementById("loadAsset");
+  if (loadButton) loadButton.disabled = true;
+
+  const message =
+    document.getElementById("message");
+
+  try {
+    message.classList.remove("error");
+    message.textContent =
+      "Loading selected asset and recalculating the fractal forecast…";
+
+    const asset = await fetchSelectedAsset();
+    activeCurrency = asset.currency || "USD";
+    activeAssetName = asset.displayName || asset.symbol;
+    let hourly = toHourly(asset.points);
+
+    if (hourly.length < 20) {
+      throw new Error(
+        "Not enough hourly history was returned."
+      );
+    }
+
+    hourly =
+      hourly.slice(-CONFIG.displayedHours);
+
+    const prices =
+      hourly.map(point => point.price);
+
+    const forecast =
+      createForecast(prices);
+
+    const futurePath =
+      buildFractalFuture(
+        prices,
+        forecast
+      );
+
+    forecast.futurePath =
+      futurePath;
+
+    const chartData =
+      buildChartData(
+        hourly,
+        forecast,
+        futurePath
+      );
+
+    renderChart(chartData);
+    updateStatus(forecast);
+
+    message.textContent =
+      `${activeAssetName} · Updated ${new Date().toLocaleTimeString()} · ` +
+      `${forecast.predictedDirection === 1 ? "HEADS / UP" : "TAILS / DOWN"} · ` +
+      `move ${formatPrice(forecast.finalMove, true)} · ` +
+      `confidence ${formatPercent(forecast.confidence)} · ` +
+      `24-hour fractal endpoint ${
+        forecast.futurePath.length
+          ? formatPrice(
+              forecast.futurePath[
+                forecast.futurePath.length - 1
+              ].price
+            )
+          : "—"
+      }`;
+  } catch (error) {
+    console.error(error);
+    message.classList.add("error");
+    message.textContent =
+      `Update failed: ${error.message}`;
+  } finally {
+    updateRunning = false;
+    if (loadButton) loadButton.disabled = false;
+  }
+}
+
+function updateAssetControls() {
+  const type = selectedAssetType();
+  const input = document.getElementById("assetSymbol");
+  const label = document.getElementById("symbolLabel");
+  const help = document.getElementById("assetHelp");
+
+  if (type === "stock") {
+    label.textContent = "Stock ticker";
+    help.textContent = "Enter a stock ticker such as AAPL, MSFT, NVDA, TSLA, SPY, or QQQ.";
+    if (!input.value.trim() || ["BTC", "ETH", "SOL"].includes(input.value.trim().toUpperCase())) {
+      input.value = "AAPL";
+    }
+  } else {
+    label.textContent = "Crypto symbol";
+    help.textContent = "Enter a crypto symbol such as BTC, ETH, SOL, XRP, ADA, or DOGE.";
+    if (!input.value.trim() || ["AAPL", "MSFT", "NVDA", "TSLA"].includes(input.value.trim().toUpperCase())) {
+      input.value = "BTC";
+    }
+  }
+}
+
+document.querySelectorAll('input[name="assetType"]').forEach(radio => {
+  radio.addEventListener("change", updateAssetControls);
+});
+
+document.getElementById("loadAsset").addEventListener("click", update);
+document.getElementById("assetSymbol").addEventListener("keydown", event => {
+  if (event.key === "Enter") update();
+});
+
+updateAssetControls();
+update();
+setInterval(update, CONFIG.refreshMilliseconds);
+</script>
+</body>
+</html>
